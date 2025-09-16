@@ -125,36 +125,41 @@ curl -X POST http://127.0.0.1:11435/v1/chat/completions   -H "Content-Type: appl
 ```python
 from openai import OpenAI
 
-client = OpenAI(
-    base_url="http://127.0.0.1:11435/v1",
-    api_key="not-needed"
-)
+client = OpenAI(base_url="http://127.0.0.1:11435/v1", api_key="not-needed")
 
-# English
-response = client.chat.completions.create(
+# --- English (streaming example) ---
+print("🔹 English:")
+stream = client.chat.completions.create(
     model="apple-fm-base",
     messages=[{"role": "user", "content": "Hello, how are you?"}],
     temperature=0.7,
-    stream=True
+    stream=True,
 )
 
-# French
-response = client.chat.completions.create(
-    model="apple-fm-base",
-    messages=[{"role": "user", "content": "Bonjour, comment allez-vous?"}],
-    stream=False
-)
-
-# Italian
-response = client.chat.completions.create(
-    model="apple-fm-base",
-    messages=[{"role": "user", "content": "Ciao, come stai?"}],
-    stream=False
-)
-
-for chunk in response:
+for chunk in stream:
     if chunk.choices[0].delta.content:
         print(chunk.choices[0].delta.content, end="")
+print("\n")
+
+# --- French (non-streaming example) ---
+print("🔹 French:")
+resp_fr = client.chat.completions.create(
+    model="apple-fm-base",
+    messages=[{"role": "user", "content": "Bonjour, comment allez-vous?"}],
+    stream=False,
+)
+print(resp_fr.choices[0].message.content)
+print()
+
+# --- Italian (non-streaming example) ---
+print("🔹 Italian:")
+resp_it = client.chat.completions.create(
+    model="apple-fm-base",
+    messages=[{"role": "user", "content": "Ciao, come stai?"}],
+    stream=False,
+)
+print(resp_it.choices[0].message.content)
+
 ```
 
 ---

@@ -105,6 +105,9 @@ class VaporServerManager: ObservableObject {
             guard !chatRequest.messages.isEmpty else {
                 throw Abort(.badRequest, reason: "No messages provided")
             }
+            if chatRequest.stream == true {
+                return try await self.handleStreamingResponse(chatRequest)
+            }
             let requestedModel = chatRequest.model ?? "apple-fm-base"
             let temp = chatRequest.temperature ?? 0.7
             let topP = chatRequest.topP ?? 0.95
@@ -151,6 +154,80 @@ class VaporServerManager: ObservableObject {
                 }
             }
         }
+    }
+
+    private func handleStreamingResponse(_ chatRequest: ChatCompletionRequest) async throws -> Response {
+        let (available, reason) = await aiManager.isModelAvailable()
+        guard available else {
+            throw Abort(.serviceUnavailable, reason: reason ?? "Model not available")
+        }
+        let fullResponse = try await aiManager.generateResponse(
+            for: chatRequest.messages,
+            temperature: chatRequest.temperature,
+            maxTokens: chatRequest.maxTokens
+        )
+        let response = Response()
+        response.headers.replaceOrAdd(name: .contentType, value: "text/event-stream")
+        response.headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
+        response.headers.replaceOrAdd(name: .connection, value: "keep-alive")
+        response.body = Response.Body(stream: { writer in
+            Task {
+                do {
+                    let responseId = "chatcmpl-\(UUID().uuidString)"
+                    let created = Int(Date().timeIntervalSince1970)
+                    let modelName = chatRequest.model ?? "apple-fm-base"
+                    let words = fullResponse.components(separatedBy: " ")
+                    var isFirstChunk = true
+                    for (index, word) in words.enumerated() {
+                        let content = index == 0 ? word : " \(word)"
+                        let streamChunk = ChatCompletionStreamResponse(
+                            id: responseId,
+                            object: "chat.completion.chunk",
+                            created: created,
+                            model: modelName,
+                            choices: [
+                                ChatCompletionStreamChoice(
+                                    index: 0,
+                                    delta: ChatCompletionDelta(
+                                        role: isFirstChunk ? "assistant" : nil,
+                                        content: content
+                                    ),
+                                    finishReason: nil
+                                )
+                            ]
+                        )
+                        let jsonData = try JSONEncoder().encode(streamChunk)
+                        let sseData = "data: \(String(data: jsonData, encoding: .utf8)!)\n\n"
+                        try await writer.write(.buffer(ByteBuffer(string: sseData)))
+                        isFirstChunk = false
+                        try await Task.sleep(nanoseconds: 50_000_000)
+                    }
+                    let finalChunk = ChatCompletionStreamResponse(
+                        id: responseId,
+                        object: "chat.completion.chunk",
+                        created: created,
+                        model: modelName,
+                        choices: [
+                            ChatCompletionStreamChoice(
+                                index: 0,
+                                delta: ChatCompletionDelta(role: nil, content: nil),
+                                finishReason: "stop"
+                            )
+                        ]
+                    )
+                    let finalJsonData = try JSONEncoder().encode(finalChunk)
+                    let finalSseData = "data: \(String(data: finalJsonData, encoding: .utf8)!)\n\n"
+                    try await writer.write(.buffer(ByteBuffer(string: finalSseData)))
+                    try await writer.write(.buffer(ByteBuffer(string: "data: [DONE]\n\n")))
+                    writer.write(.end)
+                } catch {
+                    let errorMsg = "data: {\"error\": {\"message\": \"\(error.localizedDescription)\", \"type\": \"internal_error\"}}\n\ndata: [DONE]\n\n"
+                    try? await writer.write(.buffer(ByteBuffer(string: errorMsg)))
+                    writer.write(.end)
+                }
+            }
+        })
+        return response
     }
 
     deinit {
