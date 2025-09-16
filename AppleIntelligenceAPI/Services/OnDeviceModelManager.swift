@@ -122,6 +122,61 @@ actor OnDeviceModelManager {
         return try await generateResponse(
             for: messages, temperature: temperature, maxTokens: maxTokens)
     }
+
+    func streamResponse(
+        for messages: [ChatMessage], temperature: Double? = nil, maxTokens: Int? = nil
+    ) -> AsyncThrowingStream<String, Error> {
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let (available, reason) = isModelAvailable()
+                    guard available else {
+                        continuation.finish(throwing: Abort(
+                            .serviceUnavailable, reason: reason ?? "Apple Intelligence model is not available"))
+                        return
+                    }
+                    guard !messages.isEmpty else {
+                        continuation.finish(throwing: Abort(.badRequest, reason: "No messages provided"))
+                        return
+                    }
+                    
+                    let lastMessage = messages.last!
+                    let currentPrompt = lastMessage.content
+                    let previousMessages = messages.count > 1 ? Array(messages.dropLast()) : []
+                    let transcriptEntries = convertMessagesToTranscript(previousMessages)
+                    let transcript = Transcript(entries: transcriptEntries)
+                    let session = LanguageModelSession(transcript: transcript)
+                    
+                    var options = GenerationOptions()
+                    if let temp = temperature {
+                        options = GenerationOptions(temperature: temp, maximumResponseTokens: maxTokens)
+                    } else if let maxTokens = maxTokens {
+                        options = GenerationOptions(maximumResponseTokens: maxTokens)
+                    }
+                    
+                    let responseStream = session.streamResponse(to: currentPrompt, options: options)
+                    var previousContent = ""
+                    
+                    for try await cumulativeResponse in responseStream {
+                        let currentContent = cumulativeResponse.content
+                        let deltaContent = String(currentContent.dropFirst(previousContent.count))
+                        
+                        if !deltaContent.isEmpty {
+                            continuation.yield(deltaContent)
+                        }
+                        
+                        previousContent = currentContent
+                    }
+                    
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: Abort(
+                        .internalServerError,
+                        reason: "Error generating streaming response: \(error.localizedDescription)"))
+                }
+            }
+        }
+    }
 }
 
 let aiManager = OnDeviceModelManager()

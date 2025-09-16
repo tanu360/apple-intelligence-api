@@ -60,6 +60,12 @@ class VaporServerManager: ObservableObject {
     }
 
     private func configureRoutes(_ app: Application, mode: ServerMode) {
+        app.middleware.use(CORSMiddleware(configuration: .init(
+            allowedOrigin: .all,
+            allowedMethods: [.GET, .POST, .PUT, .OPTIONS, .DELETE, .PATCH],
+            allowedHeaders: [.accept, .authorization, .contentType, .origin, .xRequestedWith, .userAgent, .accessControlAllowOrigin]
+        )))
+        
         app.get("health") { req async -> HTTPStatus in .ok }
         app.get("status") { req async throws -> ServerStatus in
             let (available, reason) = await aiManager.isModelAvailable()
@@ -157,29 +163,27 @@ class VaporServerManager: ObservableObject {
     }
 
     private func handleStreamingResponse(_ chatRequest: ChatCompletionRequest) async throws -> Response {
-        let (available, reason) = await aiManager.isModelAvailable()
-        guard available else {
-            throw Abort(.serviceUnavailable, reason: reason ?? "Model not available")
-        }
-        let fullResponse = try await aiManager.generateResponse(
-            for: chatRequest.messages,
-            temperature: chatRequest.temperature,
-            maxTokens: chatRequest.maxTokens
-        )
         let response = Response()
         response.headers.replaceOrAdd(name: .contentType, value: "text/event-stream")
         response.headers.replaceOrAdd(name: .cacheControl, value: "no-cache")
         response.headers.replaceOrAdd(name: .connection, value: "keep-alive")
+        response.headers.replaceOrAdd(name: "Access-Control-Allow-Origin", value: "*")
+        response.headers.replaceOrAdd(name: "Access-Control-Allow-Headers", value: "Cache-Control")
         response.body = Response.Body(stream: { writer in
             Task {
                 do {
                     let responseId = "chatcmpl-\(UUID().uuidString)"
                     let created = Int(Date().timeIntervalSince1970)
                     let modelName = chatRequest.model ?? "apple-fm-base"
-                    let words = fullResponse.components(separatedBy: " ")
                     var isFirstChunk = true
-                    for (index, word) in words.enumerated() {
-                        let content = index == 0 ? word : " \(word)"
+                    
+                    let responseStream = await aiManager.streamResponse(
+                        for: chatRequest.messages,
+                        temperature: chatRequest.temperature,
+                        maxTokens: chatRequest.maxTokens
+                    )
+                    
+                    for try await deltaContent in responseStream {
                         let streamChunk = ChatCompletionStreamResponse(
                             id: responseId,
                             object: "chat.completion.chunk",
@@ -190,7 +194,7 @@ class VaporServerManager: ObservableObject {
                                     index: 0,
                                     delta: ChatCompletionDelta(
                                         role: isFirstChunk ? "assistant" : nil,
-                                        content: content
+                                        content: deltaContent
                                     ),
                                     finishReason: nil
                                 )
@@ -200,8 +204,8 @@ class VaporServerManager: ObservableObject {
                         let sseData = "data: \(String(data: jsonData, encoding: .utf8)!)\n\n"
                         try await writer.write(.buffer(ByteBuffer(string: sseData)))
                         isFirstChunk = false
-                        try await Task.sleep(nanoseconds: 50_000_000)
                     }
+                    
                     let finalChunk = ChatCompletionStreamResponse(
                         id: responseId,
                         object: "chat.completion.chunk",
