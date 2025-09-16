@@ -176,13 +176,13 @@ class VaporServerManager: ObservableObject {
                     let created = Int(Date().timeIntervalSince1970)
                     let modelName = chatRequest.model ?? "apple-fm-base"
                     var isFirstChunk = true
-                    
+
                     let responseStream = await aiManager.streamResponse(
                         for: chatRequest.messages,
                         temperature: chatRequest.temperature,
                         maxTokens: chatRequest.maxTokens
                     )
-                    
+
                     for try await deltaContent in responseStream {
                         let streamChunk = ChatCompletionStreamResponse(
                             id: responseId,
@@ -205,7 +205,7 @@ class VaporServerManager: ObservableObject {
                         try await writer.write(.buffer(ByteBuffer(string: sseData)))
                         isFirstChunk = false
                     }
-                    
+
                     let finalChunk = ChatCompletionStreamResponse(
                         id: responseId,
                         object: "chat.completion.chunk",
