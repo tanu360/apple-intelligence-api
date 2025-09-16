@@ -77,7 +77,7 @@ final class ChatPanelViewModel: ObservableObject {
             messages: messagesPayload,
             temperature: temperature,
             top_p: topP,
-            stream: true
+            stream: false
         )
 
         do {
