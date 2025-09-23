@@ -207,7 +207,15 @@ public struct ChatPanel: View {
     ) {
         self.availableModels = availableModels
         self._selectedModel = selectedModel
-        self._selectedModelID = State(initialValue: selectedModel.wrappedValue?.id)
+        let initialModelID: String?
+        if let currentModel = selectedModel.wrappedValue {
+            initialModelID = currentModel.id
+        } else if let baseModel = availableModels.first(where: { $0.mode.modelName == "apple-fm-base" }) {
+            initialModelID = baseModel.id
+        } else {
+            initialModelID = availableModels.first?.id
+        }
+        self._selectedModelID = State(initialValue: initialModelID)
     }
 
     public var body: some View {
@@ -223,7 +231,15 @@ public struct ChatPanel: View {
             if let id = selectedModelID {
                 selectedModel = newList.first(where: { $0.id == id })
             } else {
-                selectedModel = nil
+                if let baseModel = newList.first(where: { $0.mode.modelName == "apple-fm-base" }) {
+                    selectedModelID = baseModel.id
+                    selectedModel = baseModel
+                } else if let firstModel = newList.first {
+                    selectedModelID = firstModel.id
+                    selectedModel = firstModel
+                } else {
+                    selectedModel = nil
+                }
             }
         }
         .onChange(of: selectedModel) { _, newModel in
@@ -247,47 +263,82 @@ public struct ChatPanel: View {
     }
 
     private var header: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "message.fill")
-                .font(.title2)
-                .foregroundColor(.blue)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Conversation")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-            }
-            Spacer()
-            Picker("Model", selection: $selectedModelID) {
-                if availableModels.isEmpty {
-                    Text("No servers running").tag(Optional<String>.none)
-                } else {
-                    ForEach(availableModels) { model in
-                        Text(model.label).tag(Optional(model.id))
+        HStack(spacing: 20) {
+            HStack(spacing: 12) {
+                Image(systemName: "brain.head.profile")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AI Chat")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                    if !availableModels.isEmpty {
+                        Text("\(availableModels.count) model\(availableModels.count == 1 ? "" : "s") available")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-            .pickerStyle(.menu)
-            .frame(minWidth: 220)
-            if let sel = selectedModel {
-                HStack(spacing: 8) {
-                    Circle().fill(Color.green).frame(width: 10, height: 10)
-                    Text(sel.mode.displayName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                HStack(spacing: 8) {
-                    Circle().fill(Color.orange).frame(width: 10, height: 10)
-                    Text("No model selected.")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+            Spacer()
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack(spacing: 12) {
+                    if availableModels.isEmpty {
+                        HStack(spacing: 8) {
+                            Circle().fill(Color.red).frame(width: 8, height: 8)
+                            Text("Server Offline")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Capsule())
+                    } else {
+                        Menu {
+                            ForEach(availableModels) { model in
+                                Button(action: {
+                                    selectedModelID = model.id
+                                }) {
+                                    HStack {
+                                        Text(model.mode.displayName)
+                                        Spacer()
+                                        if selectedModelID == model.id {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Circle().fill(selectedModel != nil ? Color.green : Color.orange).frame(width: 8, height: 8)
+                                Text(selectedModel?.mode.displayName ?? "Select Model")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Image(systemName: "chevron.down")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.vertical, 16)
+        .background(Color.gray.opacity(0.02))
+        .overlay(
+            Rectangle()
+                .frame(height: 1)
+                .foregroundColor(.gray.opacity(0.2)),
+            alignment: .bottom
+        )
     }
 
     private var transcript: some View {
