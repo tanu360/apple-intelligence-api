@@ -9,7 +9,7 @@
 
   <p>
     <a href="#-features">Features</a> •
-    <a href="#-requirements">Requirements</a> •
+    <a href="#️-requirements">Requirements</a> •
     <a href="#-building-and-installation">Build & Install</a> •
     <a href="#-usage">Usage</a> •
     <a href="#-license">License</a> •
