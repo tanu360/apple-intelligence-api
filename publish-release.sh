@@ -7,18 +7,18 @@ set -e  # Exit on any error
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_NAME="AppleIntelligenceAPI"
-BUILD_DIR="${PROJECT_DIR}/build"
+RELEASE_DIR="${PROJECT_DIR}/releases"
 TEMP_BUILD_DIR="/tmp/${PROJECT_NAME}-build-$$"
 ARCHIVE_PATH="${TEMP_BUILD_DIR}/${PROJECT_NAME}.xcarchive"
 EXPORT_PATH="${TEMP_BUILD_DIR}/export"
-FINAL_TARBALL="${BUILD_DIR}/${PROJECT_NAME}-Release.tar.gz"
+FINAL_TARBALL="${RELEASE_DIR}/${PROJECT_NAME}-Release.tar.gz"
 
 echo "🚀 Starting Apple Intelligence API release build..."
 echo "📂 Project directory: ${PROJECT_DIR}"
 
-# Create build directory if it doesn't exist
-echo "📁 Creating build directory..."
-mkdir -p "${BUILD_DIR}"
+# Create releases directory if it doesn't exist
+echo "📁 Creating releases directory..."
+mkdir -p "${RELEASE_DIR}"
 
 # Clean up any existing build artifacts
 echo "🧹 Cleaning up previous builds..."
@@ -107,6 +107,6 @@ echo ""
 echo "📊 Build Summary:"
 echo "   • File: ${PROJECT_NAME}-Release.tar.gz"
 echo "   • Size: ${FILE_SIZE}"
-echo "   • Location: ${BUILD_DIR}/"
+echo "   • Location: ${RELEASE_DIR}/"
 echo ""
 echo "🎉 Ready for distribution!"
