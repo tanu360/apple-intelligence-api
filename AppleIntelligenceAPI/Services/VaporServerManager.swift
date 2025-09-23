@@ -6,6 +6,14 @@ import NIO
 
 let globalEventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 
+private func estimateTokens(text: String) -> Int {
+    let wordCount = text.components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }.count
+    let charBasedTokens = Double(text.count) / 4.0
+    let wordBasedTokens = Double(wordCount) / 0.75
+    return Int(max(charBasedTokens, wordBasedTokens))
+}
+
 @MainActor
 class VaporServerManager: ObservableObject {
     @Published var isRunning = false
@@ -123,11 +131,16 @@ class VaporServerManager: ObservableObject {
                     temperature: temp,
                     maxTokens: chatRequest.maxTokens
                 )
+                let promptText = chatRequest.messages.map { $0.content }.joined(separator: " ")
+                let promptTokens = estimateTokens(text: promptText)
+                let completionTokens = estimateTokens(text: response)
+                let totalTokens = promptTokens + completionTokens
+                
                 let chatResponse = ChatCompletionResponse(
-                    id: "chatcmpl-\(UUID().uuidString)",
+                    id: "chatcmpl-\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))",
                     object: "chat.completion",
                     created: Int(Date().timeIntervalSince1970),
-                    model: modelName,
+                    model: modelName == "apple-fm-base" ? "foundation" : modelName,
                     choices: [
                         ChatCompletionChoice(
                             index: 0,
@@ -135,7 +148,13 @@ class VaporServerManager: ObservableObject {
                             delta: nil,
                             finishReason: "stop"
                         )
-                    ]
+                    ],
+                    usage: UsageInfo(
+                        promptTokens: promptTokens,
+                        completionTokens: completionTokens,
+                        totalTokens: totalTokens
+                    ),
+                    systemFingerprint: "fp_apple_foundation"
                 )
                 let jsonData = try JSONEncoder().encode(chatResponse)
                 let res = Response()

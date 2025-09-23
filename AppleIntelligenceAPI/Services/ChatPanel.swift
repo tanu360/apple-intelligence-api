@@ -35,12 +35,30 @@ private struct ChatChoice: Codable {
     let message: ChatChoiceMessage
 }
 
+struct ChatUsage: Codable {
+    let prompt_tokens: Int
+    let completion_tokens: Int
+    let total_tokens: Int
+}
+
 private struct ChatCompletionsResponse: Codable {
     let object: String?
     let id: String?
     let created: Int?
     let model: String?
     let choices: [ChatChoice]
+    let usage: ChatUsage?
+    let system_fingerprint: String?
+}
+
+private struct OpenAIErrorResponse: Codable {
+    let error: OpenAIErrorDetail
+}
+
+private struct OpenAIErrorDetail: Codable {
+    let message: String
+    let type: String
+    let code: String?
 }
 
 @MainActor
@@ -49,6 +67,11 @@ final class ChatPanelViewModel: ObservableObject {
     @Published var input: String = ""
     @Published var isSending: Bool = false
     @Published var lastError: String?
+    @Published var lastUsage: ChatUsage?
+    @Published var lastResponseTime: TimeInterval?
+    @Published var lastSystemFingerprint: String?
+    @Published var lastResponseId: String?
+    @Published var lastResponseModel: String?
 
     @Published var temperature: Double = 1.0
     @Published var topP: Double = 0.7
@@ -88,17 +111,27 @@ final class ChatPanelViewModel: ObservableObject {
             req.setValue("application/json", forHTTPHeaderField: "Accept")
             req.httpBody = try JSONEncoder().encode(requestBody)
 
+            let startTime = Date()
             let (data, resp) = try await URLSession.shared.data(for: req)
+            let responseTime = Date().timeIntervalSince(startTime)
             guard let http = resp as? HTTPURLResponse else {
                 throw URLError(.badServerResponse)
             }
             guard (200...299).contains(http.statusCode) else {
-                let body = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
-                throw NSError(
-                    domain: "ChatHTTPError",
-                    code: http.statusCode,
-                    userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode). \(body)"]
-                )
+                if let errorResponse = try? JSONDecoder().decode(OpenAIErrorResponse.self, from: data) {
+                    throw NSError(
+                        domain: "ChatHTTPError",
+                        code: http.statusCode,
+                        userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(errorResponse.error.message)"]
+                    )
+                } else {
+                    let body = String(data: data, encoding: .utf8) ?? "<non-utf8 body>"
+                    throw NSError(
+                        domain: "ChatHTTPError",
+                        code: http.statusCode,
+                        userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode). \(body)"]
+                    )
+                }
             }
 
             let decoded = try JSONDecoder().decode(ChatCompletionsResponse.self, from: data)
@@ -111,6 +144,22 @@ final class ChatPanelViewModel: ObservableObject {
             }
 
             entries.append(ChatEntry(role: .assistant, content: first.message.content))
+
+            lastResponseTime = responseTime
+            lastSystemFingerprint = decoded.system_fingerprint
+            lastResponseId = decoded.id
+            lastResponseModel = decoded.model
+            if let serverUsage = decoded.usage {
+                lastUsage = serverUsage
+            } else {
+                let promptTokens = estimateTokens(for: messagesPayload)
+                let completionTokens = estimateTokens(for: first.message.content)
+                lastUsage = ChatUsage(
+                    prompt_tokens: promptTokens,
+                    completion_tokens: completionTokens,
+                    total_tokens: promptTokens + completionTokens
+                )
+            }
         } catch {
             lastError = error.localizedDescription
         }
@@ -119,6 +168,27 @@ final class ChatPanelViewModel: ObservableObject {
     func clear() {
         entries.removeAll()
         lastError = nil
+        lastUsage = nil
+        lastResponseTime = nil
+        lastSystemFingerprint = nil
+        lastResponseId = nil
+        lastResponseModel = nil
+    }
+
+    private func estimateTokens(for messages: [ChatMessagePayload]) -> Int {
+        let totalText = messages.map { $0.content }.joined(separator: " ")
+        return estimateTokens(for: totalText)
+    }
+
+    private func estimateTokens(for text: String) -> Int {
+
+        let wordCount = text.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }.count
+
+        let charBasedTokens = Double(text.count) / 4.0
+        let wordBasedTokens = Double(wordCount) / 0.75
+
+        return Int(max(charBasedTokens, wordBasedTokens))
     }
 }
 
@@ -259,6 +329,84 @@ public struct ChatPanel: View {
                 }
                 .padding(12)
                 .background(Color.orange.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            if let usage = viewModel.lastUsage {
+                VStack(spacing: 8) {
+                    HStack(spacing: 16) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.text")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                            Text("Prompt: \(usage.prompt_tokens)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 4) {
+                            Image(systemName: "text.bubble")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                            Text("Completion: \(usage.completion_tokens)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 4) {
+                            Image(systemName: "sum")
+                                .font(.caption)
+                                .foregroundStyle(.purple)
+                            Text("Total: \(usage.total_tokens)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    if let responseTime = viewModel.lastResponseTime {
+                        HStack(spacing: 16) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "clock")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                                Text("Time: \(String(format: "%.2f", responseTime))s")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if responseTime > 0 {
+                                let tokensPerSecond = Double(usage.completion_tokens) / responseTime
+                                HStack(spacing: 4) {
+                                    Image(systemName: "speedometer")
+                                        .font(.caption)
+                                        .foregroundStyle(.mint)
+                                    Text("\(String(format: "%.1f", tokensPerSecond)) tok/s")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
+
+                    if let fingerprint = viewModel.lastSystemFingerprint {
+                        HStack(spacing: 4) {
+                            Image(systemName: "fingerprint")
+                                .font(.caption)
+                                .foregroundStyle(.gray)
+                            Text("System: \(fingerprint)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.blue.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             VStack(spacing: 12) {

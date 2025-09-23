@@ -50,6 +50,25 @@ struct ChatCompletionResponse: Content, Sendable {
     let created: Int
     let model: String
     let choices: [ChatCompletionChoice]
+    let usage: UsageInfo
+    let systemFingerprint: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id, object, created, model, choices, usage
+        case systemFingerprint = "system_fingerprint"
+    }
+}
+
+struct UsageInfo: Content, Sendable {
+    let promptTokens: Int
+    let completionTokens: Int
+    let totalTokens: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+        case totalTokens = "total_tokens"
+    }
 }
 
 struct ChatCompletionChoice: Content, Sendable {
