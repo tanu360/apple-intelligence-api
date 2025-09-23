@@ -202,7 +202,7 @@ class VaporServerManager: ObservableObject {
                         )
                         let jsonData = try JSONEncoder().encode(streamChunk)
                         let sseData = "data: \(String(data: jsonData, encoding: .utf8)!)\n\n"
-                        writer.write(.buffer(ByteBuffer(string: sseData)))
+                        _ = writer.write(.buffer(ByteBuffer(string: sseData)))
                         isFirstChunk = false
                     }
 
@@ -221,13 +221,13 @@ class VaporServerManager: ObservableObject {
                     )
                     let finalJsonData = try JSONEncoder().encode(finalChunk)
                     let finalSseData = "data: \(String(data: finalJsonData, encoding: .utf8)!)\n\n"
-                    writer.write(.buffer(ByteBuffer(string: finalSseData)))
-                    writer.write(.buffer(ByteBuffer(string: "data: [DONE]\n\n")))
-                    writer.write(.end)
+                    _ = writer.write(.buffer(ByteBuffer(string: finalSseData)))
+                    _ = writer.write(.buffer(ByteBuffer(string: "data: [DONE]\n\n")))
+                    _ = writer.write(.end)
                 } catch {
                     let errorMsg = "data: {\"error\": {\"message\": \"\(error.localizedDescription)\", \"type\": \"internal_error\"}}\n\ndata: [DONE]\n\n"
-                    writer.write(.buffer(ByteBuffer(string: errorMsg)))
-                    writer.write(.end)
+                  _ = writer.write(.buffer(ByteBuffer(string: errorMsg)))
+                  _ = writer.write(.end)
                 }
             }
         })
