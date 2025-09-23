@@ -210,10 +210,8 @@ public struct ChatPanel: View {
         let initialModelID: String?
         if let currentModel = selectedModel.wrappedValue {
             initialModelID = currentModel.id
-        } else if let baseModel = availableModels.first(where: { $0.mode.modelName == "apple-fm-base" }) {
-            initialModelID = baseModel.id
         } else {
-            initialModelID = availableModels.first?.id
+            initialModelID = nil
         }
         self._selectedModelID = State(initialValue: initialModelID)
     }
@@ -231,15 +229,7 @@ public struct ChatPanel: View {
             if let id = selectedModelID {
                 selectedModel = newList.first(where: { $0.id == id })
             } else {
-                if let baseModel = newList.first(where: { $0.mode.modelName == "apple-fm-base" }) {
-                    selectedModelID = baseModel.id
-                    selectedModel = baseModel
-                } else if let firstModel = newList.first {
-                    selectedModelID = firstModel.id
-                    selectedModel = firstModel
-                } else {
-                    selectedModel = nil
-                }
+                selectedModel = nil
             }
         }
         .onChange(of: selectedModel) { _, newModel in
