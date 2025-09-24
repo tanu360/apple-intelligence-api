@@ -25,19 +25,21 @@ A SwiftUI app that runs an OpenAI-compatible API server using Apple’s on-devic
 
 ---
 
-### 📸 App Screenshots
+## 📸 App Screenshots
 
 <div align="center">
+  <img src="screenshots/light-dashboard.png" alt="Light Mode Dashboard" width="500">
+  <p><em>Main Dashboard - Light Theme</em></p>
+</div>
 
-**Light Mode Dashboard**
-<img src="screenshots/light-dashboard.png" alt="Light Mode Dashboard" width="500">
+<div align="center">
+  <img src="screenshots/dark-dashboard.png" alt="Dark Mode Dashboard" width="500">
+  <p><em>Main Dashboard - Dark Theme</em></p>
+</div>
 
-**Dark Mode Dashboard**  
-<img src="screenshots/dark-dashboard.png" alt="Dark Mode Dashboard" width="500">
-
-**Chat Interface**
-<img src="screenshots/chat-window.png" alt="Chat Window" width="500">
-
+<div align="center">
+  <img src="screenshots/chat-window.png" alt="chat Interface" width="500">
+  <p><em>Chat Interface</em></p>
 </div>
 
 ---
