@@ -196,6 +196,12 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 
 ---
 
+## 🙏 Credits
+
+This project is a fork and modification of [gety-ai/apple-on-device-openai](https://github.com/gety-ai/apple-on-device-openai).
+
+---
+
 <div align="center">
   <p><sub>Built with 🍎 + ❤️ by the open-source community</sub></p>
 </div>
